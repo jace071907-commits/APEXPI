@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="60">
+<title>APEX Dispute and Intake Dashboard</title>
+<style>
+  :root {
+    --navy:#1a3c6e; --ink:#334155; --muted:#64748b; --line:#e2e8f0; --soft:#f8fafc;
+    --pends:#0ea5e9; --ageing:#f59e0b; --completed:#15803d; --pending:#d97706; --blank:#9ca3af; --invalid:#b91c1c;
+    --accent:#a7f3d0; --radius:14px; --shadow:0 6px 20px rgba(2,12,27,.18); --topbar-h:72px;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Segoe UI', Arial, sans-serif; color:var(--ink); min-height:100vh;
+         background:linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0ea5e9 100%) fixed; }
+
+  .topbar { position:fixed; top:0; left:0; right:0; height:var(--topbar-h); z-index:1000; display:flex; align-items:center; gap:16px;
+            padding-right:24px; background:rgba(0,20,45,.72); backdrop-filter:blur(6px); box-shadow:0 2px 12px rgba(0,0,0,.35); }
+  .topbar .logo { height:100%; padding:6px 10px; background:#06182c; flex:0 0 auto; }
+  .topbar .logo img { height:100%; display:block; }
+  .marquee { flex:1; min-width:0; overflow:hidden; }
+  .marquee h1 { display:inline-block; margin:0; color:#fff; font-size:22px; font-weight:700; white-space:nowrap; padding-left:100%;
+                animation:scroll-left 18s linear infinite; }
+  .marquee .assoc { color:var(--accent); font-weight:800; }
+  @keyframes scroll-left { from { transform:translateX(0); } to { transform:translateX(-100%); } }
+  .updated { flex:0 0 auto; color:#cbd5e1; font-size:12px; text-align:right; line-height:1.5; }
+  .updated b { color:#fff; font-weight:600; }
+
+  main { max-width:1400px; margin:0 auto; padding:calc(var(--topbar-h) + 28px) 24px 32px;
+         display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:24px; }
+  .card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:24px 28px; min-width:0; }
+  .card.full { grid-column:1 / -1; }
+  .card-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  h2 { margin:0; color:var(--navy); font-size:18px; font-weight:700; }
+  .tag { font-size:12px; color:var(--muted); }
+
+  .kpi { display:grid; grid-template-columns:minmax(120px, auto) 1fr; gap:8px 32px; align-items:center; }
+  .kpi .lbl { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .kpi .big { font-size:52px; font-weight:700; color:var(--navy); line-height:1.05; }
+  .kpi .row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--line); font-size:14px; }
+  .kpi .row:first-child { border-top:0; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:8px; }
+  .num { font-weight:700; }
+  .pct { color:var(--muted); font-weight:400; font-size:12px; margin-left:6px; }
+  .completed { color:var(--completed); } .pending { color:var(--pending); } .blank { color:#6b7280; }
+  .bar { display:flex; height:10px; border-radius:5px; overflow:hidden; margin-top:20px; background:#f1f5f9; }
+
+  .vchart { display:flex; align-items:flex-end; gap:14px; height:220px; border-bottom:1px solid var(--line); }
+  .vcol { flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; }
+  .vval { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:4px; }
+  .vbar { width:70%; max-width:64px; min-height:2px; border-radius:6px 6px 0 0; background:var(--pends); transition:filter .2s; }
+  .vbar.ageing { background:var(--ageing); }
+  .vbar:hover { filter:brightness(.85); }
+  .vlabels { display:flex; gap:14px; margin-top:8px; }
+  .vlabels span { flex:1; min-width:0; text-align:center; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .table-wrap { overflow-x:auto; }
+  .matrix { width:100%; border-collapse:collapse; font-size:13px; }
+  .matrix th { background:#1e293b; color:#fff; font-weight:600; font-size:12px; padding:10px 12px; text-align:center; white-space:nowrap; }
+  .matrix th:first-child { border-top-left-radius:8px; } .matrix th:last-child { border-top-right-radius:8px; }
+  .matrix th:first-child, .matrix td:first-child { text-align:left; }
+  .matrix td { padding:9px 12px; border-bottom:1px solid var(--line); text-align:center; white-space:nowrap; }
+  .matrix tbody tr:nth-child(even) { background:var(--soft); }
+  .matrix tbody tr:hover { background:#e0f2fe; }
+  .matrix tfoot td { font-weight:700; border-top:2px solid #cbd5e1; background:#f1f5f9; color:var(--navy); }
+  .matrix .tot { font-weight:700; color:var(--navy); }
+  .matrix .valid { color:var(--completed); font-weight:600; } .matrix .invalid { color:var(--invalid); font-weight:600; }
+  .mini { display:inline-block; width:90px; height:6px; border-radius:3px; background:#fee2e2; vertical-align:middle; margin-right:8px; overflow:hidden; }
+  .mini i { display:block; height:100%; background:var(--completed); }
+  .empty { grid-column:1 / -1; color:#fff; text-align:center; padding:60px 20px; font-size:16px; }
+
+  @media (max-width:900px) {
+    main { grid-template-columns:1fr; padding-left:14px; padding-right:14px; gap:18px; }
+    .updated { display:none; }
+    .card { padding:20px; }
+    .kpi .big { font-size:42px; }
+  }
+</style>
+</head>
+<body>
+<script>
+  (function(){
+    var u = null;
+    try { var raw = sessionStorage.getItem('apex_user'); if (raw) u = JSON.parse(raw); } catch(e) {}
+    document.addEventListener('DOMContentLoaded', function(){
+      var greet = document.getElementById('userGreet');
+      var firstName = u ? (u.n.split(',').length > 1 ? u.n.split(',')[1].trim().split(' ')[0] : u.n.split(' ')[0]) : '';
+      if (greet) greet.textContent = firstName;
+    });
+  })();
+</script>
+
+<header class="topbar">
+  <div class="logo"><img src="pi.png" alt="PI Logo"></div>
+  <div class="marquee">
+    <h1>Welcome <span id="userGreet" class="assoc"></span> to Apex Dispute and Intake Dashboard!</h1>
+  </div>
+  <div class="updated" id="updated"></div>
+</header>
+
+<main id="app">
+  <section class="card">
+    <div class="card-head"><h2>Pends Count</h2><span class="tag">Category = Pends</span></div>
+    <div id="pendsCard"></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Ageing Count</h2><span class="tag">Category = Ageing</span></div>
+    <div id="ageingCard"></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Pends by Manager</h2></div>
+    <div id="pendsChart"></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Ageing by Manager</h2></div>
+    <div id="ageingChart"></div>
+  </section>
+  <section class="card full">
+    <div class="card-head"><h2>Pend Reviewed</h2><span class="tag">Source: RPTDB</span></div>
+    <div class="table-wrap"><table class="matrix" id="reviewTable"></table></div>
+  </section>
+  <section class="card full">
+    <div class="card-head"><h2>Substatus Report</h2><span class="tag">Sub-status by Manager</span></div>
+    <div class="table-wrap"><table class="matrix" id="matrixTable"></table></div>
+  </section>
+</main>
+
+<!--APEX_DATA-->
+<script>var APEX_DATA = {"generated":"2026-10-27 09:11","sources":[{"name":"DI Ageing-Pends.xlsx","modified":"2026-09-22 05:09","rows":788},{"name":"RPTDB.xlsx","modified":"2026-10-06 09:23","rows":206}],"pends":{"total":555,"completed":25,"pending":267,"blank":263},"ageing":{"total":233,"completed":21,"pending":85,"blank":127},"managers":["Jennifer Rutor","Mickee Vergara","Brent Nido","Chernobyl Publico","Clarissa Alfonso"],"mgrPends":[{"m":"Jennifer Rutor","v":305},{"m":"Mickee Vergara","v":102},{"m":"Brent Nido","v":100},{"m":"Chernobyl Publico","v":38},{"m":"Clarissa Alfonso","v":10}],"mgrAge":[{"m":"Jennifer Rutor","v":98},{"m":"Mickee Vergara","v":44},{"m":"Brent Nido","v":30},{"m":"Chernobyl Publico","v":43},{"m":"Clarissa Alfonso","v":18}],"matrix":{"rows":[{"s":"Awaiting CCA Response","cells":[346,113,111,42,17],"total":629},{"s":"Additional Research","cells":[32,16,6,5,11],"total":70},{"s":"Finance Review","cells":[9,0,0,31,0],"total":40},{"s":"Awaiting Medical Review","cells":[0,15,12,2,0],"total":29},{"s":"SIU/PPR Review","cells":[8,0,1,0,0],"total":9},{"s":"Funding Off Outreach","cells":[3,1,0,0,0],"total":4},{"s":"AIM Pending Review","cells":[2,0,0,0,0],"total":2},{"s":"Pending Reversal","cells":[1,0,0,1,0],"total":2},{"s":"Awaiting Check","cells":[1,0,0,0,0],"total":1},{"s":"Awaiting HD pymt Group Approval","cells":[1,0,0,0,0],"total":1},{"s":"Purge Claim Request","cells":[0,1,0,0,0],"total":1}],"colTotals":[403,146,130,81,28],"grand":788},"review":{"rows":[{"m":"Jennifer Rutor","v":122,"i":36,"t":158},{"m":"Brent Nido","v":21,"i":2,"t":23},{"m":"Clarissa Alfonso","v":8,"i":8,"t":16},{"m":"Mickee Vergara","v":3,"i":2,"t":5},{"m":"Chernobyl Publico","v":3,"i":0,"t":3}],"totals":{"v":157,"i":48,"t":205}}};</script>
+<!--/APEX_DATA-->
+
+<script>
+  (function () {
+    var D = window.APEX_DATA;
+    if (!D) {
+      document.getElementById('app').innerHTML = '<div class="empty">No data loaded. Run <b>refresh-dashboard.bat</b> (build-dashboard.py) to generate the dashboard.</div>';
+      return;
+    }
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); }
+    function fmt(n) { return Number(n).toLocaleString(); }
+    function cell(n) { return n ? fmt(n) : ''; }
+    function pct(n, t) { return t ? Math.round(n / t * 1000) / 10 : 0; }
+
+    document.getElementById('updated').innerHTML =
+      'Last refreshed <b>' + esc(D.generated) + '</b><br>' +
+      D.sources.map(function (s) { return esc(s.name) + ': ' + esc(s.modified); }).join(' &middot; ');
+
+    function renderKpi(id, d) {
+      var cp = pct(d.completed, d.total), pp = pct(d.pending, d.total), bp = d.total ? Math.round((100 - cp - pp) * 10) / 10 : 0;
+      function row(cls, color, label, n, p) {
+        return '<div class="row"><span class="' + cls + '"><span class="dot" style="background:' + color + '"></span>' + label + '</span>' +
+               '<span class="num ' + cls + '">' + fmt(n) + '<span class="pct">' + p + '%</span></span></div>';
+      }
+      document.getElementById(id).innerHTML =
+        '<div class="kpi">' +
+          '<div><div class="lbl">Total</div><div class="big">' + fmt(d.total) + '</div></div>' +
+          '<div>' +
+            row('completed', 'var(--completed)', 'Completed', d.completed, cp) +
+            row('pending', 'var(--pending)', 'Pending', d.pending, pp) +
+            row('blank', 'var(--blank)', 'Blank', d.blank, bp) +
+          '</div>' +
+        '</div>' +
+        '<div class="bar">' +
+          '<div style="width:' + cp + '%;background:var(--completed)" title="Completed ' + cp + '%"></div>' +
+          '<div style="width:' + pp + '%;background:var(--pending)" title="Pending ' + pp + '%"></div>' +
+          '<div style="width:' + bp + '%;background:var(--blank)" title="Blank ' + bp + '%"></div>' +
+        '</div>';
+    }
+
+    function renderChart(id, list, cls, noun) {
+      var data = list.slice().sort(function (a, b) { return b.v - a.v; });
+      var max = Math.max.apply(null, data.map(function (d) { return d.v; }).concat([1]));
+      document.getElementById(id).innerHTML =
+        '<div class="vchart">' + data.map(function (d) {
+          return '<div class="vcol"><div class="vval">' + fmt(d.v) + '</div>' +
+                 '<div class="vbar ' + cls + '" style="height:' + (d.v / max * 85) + '%" title="Mgr ' + esc(d.m) + ': ' + d.v + ' ' + noun + '"></div></div>';
+        }).join('') + '</div>' +
+        '<div class="vlabels">' + data.map(function (d) { return '<span title="' + esc(d.m) + '">' + esc(d.m) + '</span>'; }).join('') + '</div>';
+    }
+
+    function renderReview(r) {
+      var body = r.rows.map(function (x) {
+        var vp = pct(x.v, x.t);
+        return '<tr><td>' + esc(x.m) + '</td><td class="valid">' + cell(x.v) + '</td><td class="invalid">' + cell(x.i) + '</td>' +
+               '<td class="tot">' + fmt(x.t) + '</td><td><span class="mini"><i style="width:' + vp + '%"></i></span>' + vp + '%</td></tr>';
+      }).join('');
+      var t = r.totals, tp = pct(t.v, t.t);
+      document.getElementById('reviewTable').innerHTML =
+        '<thead><tr><th>Manager</th><th>Valid</th><th>Invalid</th><th>Total</th><th>Valid %</th></tr></thead>' +
+        '<tbody>' + body + '</tbody>' +
+        '<tfoot><tr><td>Total</td><td>' + fmt(t.v) + '</td><td>' + fmt(t.i) + '</td><td>' + fmt(t.t) + '</td><td>' + tp + '%</td></tr></tfoot>';
+    }
+
+    function renderMatrix(m, managers) {
+      var head = '<tr><th>Sub-status</th>' + managers.map(function (n) { return '<th>' + esc(n) + '</th>'; }).join('') + '<th>Total</th></tr>';
+      var body = m.rows.map(function (r) {
+        return '<tr><td>' + esc(r.s) + '</td>' + r.cells.map(function (v) { return '<td>' + cell(v) + '</td>'; }).join('') +
+               '<td class="tot">' + fmt(r.total) + '</td></tr>';
+      }).join('');
+      var foot = '<tr><td>Total</td>' + m.colTotals.map(function (v) { return '<td>' + fmt(v) + '</td>'; }).join('') + '<td>' + fmt(m.grand) + '</td></tr>';
+      document.getElementById('matrixTable').innerHTML = '<thead>' + head + '</thead><tbody>' + body + '</tbody><tfoot>' + foot + '</tfoot>';
+    }
+
+    renderKpi('pendsCard', D.pends);
+    renderKpi('ageingCard', D.ageing);
+    renderChart('pendsChart', D.mgrPends, '', 'Pends');
+    renderChart('ageingChart', D.mgrAge, 'ageing', 'Ageing');
+    renderReview(D.review);
+    renderMatrix(D.matrix, D.managers);
+  })();
+</script>
+</body>
+</html>
